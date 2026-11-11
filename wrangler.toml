@@ -8,6 +8,15 @@ compatibility_date = "2025-06-01"
 [[kv_namespaces]]
 binding = "KV"
 
+# Keeps the ticks. Always returns the newest data, so the count is right even with quick ticks
+[[durable_objects.bindings]]
+name = "STORE"
+class_name = "Store"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Store"]
+
 # 12:00, 16:00, 20:00 and 21:00 Korea time (written in UTC)
 [triggers]
 crons = ["0 3 * * *", "0 7 * * *", "0 11 * * *", "0 12 * * *"]

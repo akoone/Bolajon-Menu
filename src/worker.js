@@ -35,14 +35,45 @@ async function tg(env, method, payload) {
   } catch (e) { return { ok: false }; }
 }
 
-// ---- storage (Cloudflare KV) ----
-async function getCfg(env) { const c = (await env.KV.get('cfg', 'json')) || {}; c.chats = c.chats || {}; c.pending = c.pending || {}; c.langs = c.langs || {}; return c; }
-const saveCfg = (env, c) => env.KV.put('cfg', JSON.stringify(c));
+// ---- storage ----
+// Ticks live in a Durable Object, which always returns the newest data. (The older KV storage could be up to
+// a minute behind, so quick ticks were counted wrongly.) Old data in KV is copied over once.
+export class Store {
+  constructor(state) { this.s = state.storage; }
+  async fetch(req) {
+    const o = await req.json(); let r = { ok: 1 };
+    if (o.op === 'get') { const x = await this.s.get(o.k); r = { v: x ? x.v : null }; }
+    else if (o.op === 'put') await this.s.put(o.k, { v: o.v, m: o.m || null });
+    else if (o.op === 'del') await this.s.delete(o.k);
+    else if (o.op === 'list') { const m = await this.s.list({ prefix: o.prefix }); r = { keys: [...m].map(([k, x]) => ({ name: k, metadata: x.m })) }; }
+    return new Response(JSON.stringify(r));
+  }
+}
+function db(env) {
+  if (!env.STORE) return env.KV;
+  const stub = env.STORE.get(env.STORE.idFromName('main'));
+  const call = async (o) => (await stub.fetch('https://store/', { method: 'POST', body: JSON.stringify(o) })).json();
+  return {
+    get: async (k, t) => { const r = await call({ op: 'get', k }); return r.v == null ? null : t === 'json' ? JSON.parse(r.v) : r.v; },
+    put: (k, v, o) => call({ op: 'put', k, v, m: o && o.metadata }),
+    delete: (k) => call({ op: 'del', k }),
+    list: (o) => call({ op: 'list', prefix: o.prefix }),
+  };
+}
+async function migrate(env) {
+  if (!env.STORE || !env.KV) return null;
+  const old = await env.KV.get('cfg', 'json'); if (!old || !old.owner) return null;
+  for (const prefix of ['t:', 'done:']) { const res = await env.KV.list({ prefix }); for (const k of res.keys) await db(env).put(k.name, '1', { metadata: k.metadata }); }
+  await db(env).put('cfg', JSON.stringify(old));
+  return old;
+}
+async function getCfg(env) { const c = (await db(env).get('cfg', 'json')) || (await migrate(env)) || {}; c.chats = c.chats || {}; c.pending = c.pending || {}; c.langs = c.langs || {}; return c; }
+const saveCfg = (env, c) => db(env).put('cfg', JSON.stringify(c));
 const langOf = (cfg, id) => (cfg.langs[id] === 'en' ? 'en' : 'uz');
 // Each tick is its own key, so two people ticking at the same moment never overwrite each other.
 async function getState(env, date) {
   const st = {}, prefix = 't:' + date + ':';
-  const res = await env.KV.list({ prefix });
+  const res = await db(env).list({ prefix });
   for (const k of res.keys) { const key = k.name.slice(prefix.length); st[key] = 1; if (k.metadata && k.metadata.at) st['@' + key] = k.metadata.at + '|' + (k.metadata.by || ''); }
   return st;
 }
@@ -186,21 +217,25 @@ async function tick(env, cfg, u, date, key, val) {
   if (!MENU[date]) return;
   const it0 = items(date, 'uz').find((x) => x.k === key); if (!it0) return;
   const name = 't:' + date + ':' + key;
-  if (val) await env.KV.put(name, '1', { metadata: { at: hhmm(), by: cfg.chats[u] || '' } }); else await env.KV.delete(name);
+  if (val) await db(env).put(name, '1', { metadata: { at: hhmm(), by: cfg.chats[u] || '' } }); else await db(env).delete(name);
   if (!it0.food || !val) return;
   const st = await getState(env, date); st[key] = 1; // include this tick even if the list is a moment behind
   const all = progress(date, st, 'uz').left.length === 0;
   if (all) {
-    if (await env.KV.get('done:' + date)) return;
-    await env.KV.put('done:' + date, '1');
+    if (await db(env).get('done:' + date)) return;
+    await db(env).put('done:' + date, '1');
     return sendAll(env, cfg, (lang) => celebrateText(date, lang), null, { message_effect_id: EFFECT_PARTY });
   }
-  const who = cfg.chats[u] ? h(cfg.chats[u]) + ': ' : '';
+  const who = cfg.chats[u] ? h(cfg.chats[u]) + ' · ' : '';
   await sendAll(env, cfg, (lang) => {
-    const pr = progress(date, st, lang), it = items(date, lang).find((x) => x.k === key);
-    return who + '✅ <b>' + h(it.t) + '</b> ' + T(lang, 'tayyor!', 'is done!') + ' (' + pr.done + '/' + pr.all + ')\n' + bar(pr.pct) + '\n\n' + T(lang, 'Qoldi: ', 'Left: ') + pr.left.map((x) => h(x.t)).join(', ');
+    const pr = progress(date, st, lang), it = items(date, lang).find((x) => x.k === key), X = D(lang);
+    return ['✅ <b>' + h(it.t) + '</b> ' + T(lang, 'tayyor!', 'is ready!'), '<i>' + who + hhmm() + '</i>', '',
+      bar(pr.pct) + '  (' + pr.done + '/' + pr.all + ')', '',
+      '<b>' + T(lang, 'Qoldi:', 'Still to do:') + '</b>'].concat(pr.left.map((x) => '▫️ ' + h(x.t)),
+      ['', '<blockquote>' + h(X.PRAISE[pr.done % X.PRAISE.length]) + ' ' + T(lang, 'Yana ' + pr.left.length + ' ta qoldi.', pr.left.length + ' more to go.') + '</blockquote>']).join('\n');
   });
 }
+
 
 // The permanent button beside the message box that opens the mini app, in each person's language
 const menuButton = (env, cfg, chatId, lang) => {
