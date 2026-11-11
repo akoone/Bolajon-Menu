@@ -123,15 +123,21 @@ async function sendSlot(env, slot) {
   const date = target(now), cfg = await getCfg(env), st = await getState(env, date);
   await sendAll(env, cfg, (lang) => build(date, slot, st, lang, now), date);
 }
-// 21:00: a gentle note, only if some food is still unticked
+// 21:00: end-of-day report. What the baby ate today (that day has passed), then how the prep for the next day stands.
 async function send21(env) {
-  if (!MENU[today()]) return;
-  const date = target(today()), cfg = await getCfg(env), st = await getState(env, date);
-  if (!progress(date, st, 'uz').left.length) return;
+  const now = today(); if (!MENU[now]) return;
+  const date = target(now), cfg = await getCfg(env), stNow = await getState(env, now), st = date === now ? stNow : await getState(env, date);
   await sendAll(env, cfg, (lang) => {
-    const pr = progress(date, st, lang);
-    return ['<b>' + T(lang, '🕘 Kun yakuni: ' + pr.done + '/' + pr.all + ' bajarildi', '🕘 End of day: ' + pr.done + '/' + pr.all + ' done') + '</b>', date !== today() ? T(lang, '🍳 ' + fd(lang, date, true) + ' uchun', '🍳 For ' + fd(lang, date, true)) : '', '', T(lang, 'Hali belgilanmaganlar:', 'Not ticked yet:')]
-      .concat(pr.left.map((x) => '☐ ' + h(x.t)), ['', T(lang, "Agar tayyor bo'lsa, belgilab qo'ying. Ulgurmagan bo'lsangiz ham hechqisi yo'q 🤍", 'If it is ready, please tick it. If you did not manage, that is fine too 🤍')]).join('\n');
+    const ate = items(now, lang).filter((x) => x.food), got = ate.filter((x) => stNow[x.k]).length;
+    const L = ['<b>' + T(lang, '🕘 Kun yakuni: ', '🕘 End of day: ') + fd(lang, now, true) + '</b>', '',
+      '<b>' + T(lang, '👶 Bugun bola yedi', '👶 Baby ate today') + (got ? ' (' + got + '/' + ate.length + ' ✅)' : '') + '</b>'].concat(ate.map((x) => (stNow[x.k] ? '✅ ' : '• ') + h(x.t)));
+    if (date !== now) {
+      const pr = progress(date, st, lang);
+      L.push('', '<b>' + T(lang, '🍳 Ertaga uchun tayyorgarlik: ', '🍳 Prep for the next day: ') + fd(lang, date, true) + '</b>', bar(pr.pct));
+      if (pr.left.length) L.push(T(lang, 'Hali belgilanmaganlar:', 'Not ticked yet:'), ...pr.left.map((x) => '☐ ' + h(x.t)), '', T(lang, "Agar tayyor bo'lsa, belgilab qo'ying. Ulgurmagan bo'lsangiz ham hechqisi yo'q 🤍", 'If it is ready, please tick it. If you did not manage, that is fine too 🤍'));
+      else L.push(T(lang, 'Hammasi tayyor, barakalla! 🌸', 'Everything is ready, well done! 🌸'));
+    }
+    return L.join('\n');
   }, date);
 }
 
