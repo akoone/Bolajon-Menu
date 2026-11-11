@@ -1,0 +1,14 @@
+name = "bolajon-menu-bot"
+main = "src/worker.js"
+compatibility_date = "2025-06-01"
+
+# Stores the ticks and the list of approved people
+[[kv_namespaces]]
+binding = "KV"
+
+# 12:00, 16:00, 20:00 and 21:00 Korea time (written in UTC)
+[triggers]
+crons = ["0 3 * * *", "0 7 * * *", "0 11 * * *", "0 12 * * *"]
+
+[observability]
+enabled = true
