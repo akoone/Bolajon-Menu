@@ -182,6 +182,12 @@ async function tick(env, cfg, u, date, key, val) {
   });
 }
 
+// The permanent button beside the message box that opens the mini app, in each person's language
+const menuButton = (env, cfg, chatId, lang) => {
+  const p = { menu_button: { type: 'web_app', text: T(lang, "📋 Ro'yxat", '📋 List'), web_app: { url: cfg.url + '/app?l=' + lang } } };
+  if (chatId) p.chat_id = chatId;
+  return tg(env, 'setChatMenuButton', p);
+};
 const LANG_KB = { inline_keyboard: [[{ text: "🇺🇿 O'zbekcha", callback_data: 'lg|uz' }, { text: '🇬🇧 English', callback_data: 'lg|en' }]] };
 const helpText = (lang) => T(lang,
   "Assalomu alaykum! 🌷 Har kuni soat 12:00, 16:00 va 20:00 da bugungi menyu keladi. Tugmani bosib ro'yxatni oching va tayyor bo'lgan ovqatni belgilang.\n\n/bugun — bugungi ro'yxat\n/ertaga — ertangi menyu\n/til — tilni tanlash",
@@ -198,6 +204,7 @@ async function onCallback(env, q) {
   await tg(env, 'answerCallbackQuery', { callback_query_id: q.id });
   if (d[0] === 'lg' && cfg.chats[from]) {
     cfg.langs[from] = d[1] === 'en' ? 'en' : 'uz'; await saveCfg(env, cfg);
+    await menuButton(env, cfg, from, cfg.langs[from]);
     await tg(env, 'sendMessage', { chat_id: from, text: T(cfg.langs[from], "Til: O'zbekcha ✅", 'Language: English ✅') });
     return sendToday(env, cfg, from);
   }
@@ -266,7 +273,7 @@ async function api(env, req, path) {
   if (path === 'state') return json(MENU[b.date] ? await getState(env, b.date) : {});
   if (path === 'tick') { await tick(env, cfg, u, String(b.date), String(b.key), !!b.val); return json({ ok: 1 }); }
   if (path === 'history') return u === cfg.owner ? json(await history(env, cfg, langOf(cfg, u))) : json({ error: 'no' }, 403);
-  if (path === 'lang') { cfg.langs[u] = b.lang === 'en' ? 'en' : 'uz'; await saveCfg(env, cfg); return json({ ok: 1 }); }
+  if (path === 'lang') { cfg.langs[u] = b.lang === 'en' ? 'en' : 'uz'; await saveCfg(env, cfg); await menuButton(env, cfg, u, cfg.langs[u]); return json({ ok: 1 }); }
   return json({ error: 'not found' }, 404);
 }
 
@@ -275,6 +282,8 @@ async function setup(env, origin) {
   const hook = await tg(env, 'setWebhook', { url: origin + '/tg', secret_token: await webhookSecret(env), allowed_updates: ['message', 'callback_query'] });
   const cmds = [{ command: 'bugun', description: "Bugungi ro'yxat / Today's list" }, { command: 'ertaga', description: 'Ertangi menyu / Tomorrow' }, { command: 'til', description: 'Til / Language' }];
   const c = await tg(env, 'setMyCommands', { commands: cmds });
+  await menuButton(env, cfg, null, 'uz');
+  for (const id of Object.keys(cfg.chats)) await menuButton(env, cfg, id, langOf(cfg, id));
   return new Response(hook.ok && c.ok ? 'Tayyor! Endi Telegramda botga /start yuboring.\nReady! Now send /start to the bot in Telegram.' : 'Xato / Error: ' + JSON.stringify(hook) + '\nBOT_TOKEN to\'g\'ri kiritilganini tekshiring. Check that BOT_TOKEN is set correctly.', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
 }
 
