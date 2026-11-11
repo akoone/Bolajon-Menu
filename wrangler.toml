@@ -1,4 +1,5 @@
-name = "bolajon-menu-bot"
+name = "bolajon-menu"
+workers_dev = true
 main = "src/worker.js"
 compatibility_date = "2025-06-01"
 

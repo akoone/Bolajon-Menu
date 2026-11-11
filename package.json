@@ -1,5 +1,5 @@
 {
-  "name": "bolajon-menu-bot",
+  "name": "bolajon-menu",
   "private": true,
   "type": "module",
   "scripts": { "deploy": "wrangler deploy" },
