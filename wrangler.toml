@@ -1,5 +1,6 @@
 name = "bolajon-menu"
 workers_dev = true
+keep_vars = true
 main = "src/worker.js"
 compatibility_date = "2025-06-01"
 
