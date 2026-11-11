@@ -280,7 +280,7 @@ async function setup(env, origin) {
 
 export default {
   async fetch(req, env) {
-    const url = new URL(req.url), p = url.pathname;
+    const url = new URL(req.url), p = url.pathname.replace(/\/+$/, '').toLowerCase() || '/';
     try {
       if (p === '/app') return new Response(url.searchParams.get('l') === 'en' ? APP_EN : APP_UZ, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
       if (p.indexOf('/api/') === 0 && req.method === 'POST') return await api(env, req, p.slice(5));
