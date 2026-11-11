@@ -124,22 +124,30 @@ async function sendSlot(env, slot) {
   await sendAll(env, cfg, (lang) => build(date, slot, st, lang, now), date);
 }
 // 21:00: end-of-day report. What the baby ate today (that day has passed), then how the prep for the next day stands.
+const LINE = '┈┈┈┈┈┈┈┈┈┈┈┈┈┈';
+const ICON = { am0: '🌅', lu0: '🍚', lu1: '🥣', lu2: '🍽', lu3: '🥬', lu4: '🥗', pm0: '🍎' };
 async function send21(env) {
   const now = today(); if (!MENU[now]) return;
   const date = target(now), cfg = await getCfg(env), stNow = await getState(env, now), st = date === now ? stNow : await getState(env, date);
   await sendAll(env, cfg, (lang) => {
-    const ate = items(now, lang).filter((x) => x.food), got = ate.filter((x) => stNow[x.k]).length;
-    const L = ['<b>' + T(lang, '🕘 Kun yakuni: ', '🕘 End of day: ') + fd(lang, now, true) + '</b>', '',
-      '<b>' + T(lang, '👶 Bugun bola yedi', '👶 Baby ate today') + (got ? ' (' + got + '/' + ate.length + ' ✅)' : '') + '</b>'].concat(ate.map((x) => (stNow[x.k] ? '✅ ' : '• ') + h(x.t)));
+    const X = D(lang), n = parts(now).d, ate = items(now, lang).filter((x) => x.food);
+    const L = ['🌙 <b>' + T(lang, 'KUN YAKUNI', 'END OF DAY') + '</b>', '<i>' + fd(lang, now, true) + '</i>', LINE, '',
+      '👶 <b>' + T(lang, 'Bugun bolajon yedi', 'Today the little one ate') + '</b>', '']
+      .concat(ate.map((x) => (ICON[x.k] || '🍽') + '  ' + h(x.t) + (stNow[x.k] ? ' ✅' : '')));
+    L.push('', '<blockquote>💛 ' + h(X.BENEFITS[n % X.BENEFITS.length]) + '</blockquote>');
     if (date !== now) {
       const pr = progress(date, st, lang);
-      L.push('', '<b>' + T(lang, '🍳 Ertaga uchun tayyorgarlik: ', '🍳 Prep for the next day: ') + fd(lang, date, true) + '</b>', bar(pr.pct));
-      if (pr.left.length) L.push(T(lang, 'Hali belgilanmaganlar:', 'Not ticked yet:'), ...pr.left.map((x) => '☐ ' + h(x.t)), '', T(lang, "Agar tayyor bo'lsa, belgilab qo'ying. Ulgurmagan bo'lsangiz ham hechqisi yo'q 🤍", 'If it is ready, please tick it. If you did not manage, that is fine too 🤍'));
-      else L.push(T(lang, 'Hammasi tayyor, barakalla! 🌸', 'Everything is ready, well done! 🌸'));
+      L.push(LINE, '', '🍳 <b>' + T(lang, 'Ertaga uchun tayyorgarlik', 'Prep for the next day') + '</b>', '<i>' + fd(lang, date, true) + '</i>', '', bar(pr.pct) + '  (' + pr.done + '/' + pr.all + ')');
+      if (pr.left.length) L.push('', T(lang, '<b>Hali qolganlar:</b>', '<b>Still to do:</b>'), ...pr.left.map((x) => '▫️ ' + h(x.t)));
+      else L.push('', T(lang, '✨ Hammasi tayyor, barakalla!', '✨ Everything is ready, well done!'));
     }
+    L.push(LINE, pr21(lang, date !== now && progress(date, st, lang).left.length > 0));
     return L.join('\n');
   }, date);
 }
+const pr21 = (lang, left) => left
+  ? T(lang, "🤍 Ulgurmagan bo'lsangiz ham hechqisi yo'q. Yaxshi dam oling, onajon 🌙", '🤍 If you did not manage it all, that is fine. Rest well, dear mom 🌙')
+  : T(lang, '🤲 Mehnatingiz uchun rahmat. Yaxshi dam oling, onajon 🌙', '🤲 Thank you for your effort. Rest well, dear mom 🌙');
 
 function celebrateText(date, lang) {
   const n = parts(date).d, X = D(lang), hd = X.HADITH[n % X.HADITH.length];
