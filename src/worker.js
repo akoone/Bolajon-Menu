@@ -15,6 +15,9 @@ const parts = (date) => { const a = date.split('-'); return { y: +a[0], m: +a[1]
 const DAYS = Object.keys(MENU).sort();
 const nextMenuDay = (date) => { const i = DAYS.indexOf(date); return i >= 0 && i < DAYS.length - 1 ? DAYS[i + 1] : null; };
 
+// The mom cooks one day ahead: on a menu day she prepares the next menu day (Saturday prepares Monday).
+const target = (date) => nextMenuDay(date) || date;
+
 // ---- language helpers ----
 const D = (lang) => (lang === 'en' ? EN : UZ);
 const T = (lang, uz, en) => (lang === 'en' ? en : uz);
@@ -97,42 +100,45 @@ function progress(date, st, lang) {
 }
 
 // Daily message text (12:00, 16:00, 20:00)
-function build(date, slot, st, lang) {
-  const m = MENU[date], p = parts(date), n = p.d, pr = progress(date, st, lang), X = D(lang);
+function build(date, slot, st, lang, now) {
+  now = now || date;
+  const m = MENU[date], p = parts(now), n = p.d, pr = progress(date, st, lang), X = D(lang);
   let L = [X.GREET[n % X.GREET.length]];
   if (slot === '12') L.push(T(lang, 'Tushlik vaqti yaqinlashdi, shoshilmasdan, xotirjam 🍃', 'Lunch time is near. No rush, take it easy 🍃'));
   if (slot === '16') L.push(T(lang, "Kunning yarmidan ko'pi o'tdi, barakalla 🌿", 'More than half of the day is done, well done 🌿'));
   if (slot === '20') L.push(T(lang, 'Kun yakuniga yetdi, ozgina qoldi 🌙', 'The day is almost over, just a little left 🌙'));
   const label = m.label ? ' ✨ ' + h(lang === 'en' ? EN.label[m.label] || m.label : m.label) : '';
-  L.push('', '<b>📅 ' + fd(lang, date, true) + '</b>' + label, bar(pr.pct));
+  if (now !== date) L.push('', T(lang, '📅 Bugun: ', '📅 Today: ') + '<b>' + fd(lang, now, true) + '</b>', T(lang, '🍳 Tayyorlaymiz: ', '🍳 Preparing for: ') + '<b>' + fd(lang, date, true) + '</b>' + label, bar(pr.pct));
+  else L.push('', '<b>📅 ' + fd(lang, date, true) + '</b>' + label, bar(pr.pct));
   L = L.concat(statusLines(date, st, slot === '20', lang));
   L.push('', T(lang, '⚠️ Allergenlar: ', '⚠️ Allergens: ') + h(alg(lang, m.allergen)));
   if (slot === '12') L.push('💡 ' + X.TIPS_12[n % X.TIPS_12.length]);
   if (slot === '16') L.push('💡 ' + X.TIPS_16[n % X.TIPS_16.length], T(lang, "O'zingiz ham bir piyola choy iching, dam oling ☕", 'Have a cup of tea yourself and rest a little ☕'));
-  if (slot === ['12', '16', '20'][(p.d * 7 + p.m) % 3]) L.push('', h(savingLine(date, lang)));
+  if (now !== date && MENU[now]) { const t = MENU[now]; L.push('', '<b>' + T(lang, '👶 Bugun bola yeydi:', '👶 Baby eats today:') + '</b>', '🌅 ' + h(dn(lang, t.ertalab)), '🍚 ' + t.tushlik.map((x) => h(dn(lang, x))).join(', ')); if (t.kechki) L.push('🍎 ' + h(dn(lang, t.kechki))); }
+  if (slot === ['12', '16', '20'][(p.d * 7 + p.m) % 3]) L.push('', h(savingLine(now, lang)));
   return L.join('\n');
 }
 async function sendSlot(env, slot) {
-  const date = today(); if (!MENU[date]) return;
-  const cfg = await getCfg(env), st = await getState(env, date);
-  await sendAll(env, cfg, (lang) => build(date, slot, st, lang), date);
+  const now = today(); if (!MENU[now]) return;
+  const date = target(now), cfg = await getCfg(env), st = await getState(env, date);
+  await sendAll(env, cfg, (lang) => build(date, slot, st, lang, now), date);
 }
 // 21:00: a gentle note, only if some food is still unticked
 async function send21(env) {
-  const date = today(); if (!MENU[date]) return;
-  const cfg = await getCfg(env), st = await getState(env, date);
+  if (!MENU[today()]) return;
+  const date = target(today()), cfg = await getCfg(env), st = await getState(env, date);
   if (!progress(date, st, 'uz').left.length) return;
   await sendAll(env, cfg, (lang) => {
     const pr = progress(date, st, lang);
-    return ['<b>' + T(lang, '🕘 Kun yakuni: ' + pr.done + '/' + pr.all + ' bajarildi', '🕘 End of day: ' + pr.done + '/' + pr.all + ' done') + '</b>', '', T(lang, 'Hali belgilanmaganlar:', 'Not ticked yet:')]
-      .concat(pr.left.map((x) => '☐ ' + h(x.t)), ['', T(lang, "Agar berilgan bo'lsa, belgilab qo'ying. Berilmagan bo'lsa ham hechqisi yo'q, ertaga yangi kun 🤍", 'If it was given, please tick it. If not, that is fine too, tomorrow is a new day 🤍')]).join('\n');
+    return ['<b>' + T(lang, '🕘 Kun yakuni: ' + pr.done + '/' + pr.all + ' bajarildi', '🕘 End of day: ' + pr.done + '/' + pr.all + ' done') + '</b>', date !== today() ? T(lang, '🍳 ' + fd(lang, date, true) + ' uchun', '🍳 For ' + fd(lang, date, true)) : '', '', T(lang, 'Hali belgilanmaganlar:', 'Not ticked yet:')]
+      .concat(pr.left.map((x) => '☐ ' + h(x.t)), ['', T(lang, "Agar tayyor bo'lsa, belgilab qo'ying. Ulgurmagan bo'lsangiz ham hechqisi yo'q 🤍", 'If it is ready, please tick it. If you did not manage, that is fine too 🤍')]).join('\n');
   }, date);
 }
 
 function celebrateText(date, lang) {
   const n = parts(date).d, X = D(lang), hd = X.HADITH[n % X.HADITH.length];
   const pre = /^(Rasululloh|Oisha|«|Robbanaa)/.test(hd[0]) ? '' : T(lang, 'Rasululloh ﷺ dedilar: ', 'The Prophet ﷺ said: ');
-  return ['<b>' + T(lang, 'Tabriklaymiz, onajon! 🎉', 'Congratulations, dear mom! 🎉') + '</b>', T(lang, 'Bugungi barcha ovqatlar berildi (100%).', 'All of today\'s meals were given (100%).'), '', h(X.THANKS[n % X.THANKS.length]), '',
+  return ['<b>' + T(lang, 'Tabriklaymiz, onajon! 🎉', 'Congratulations, dear mom! 🎉') + '</b>', T(lang, 'Barcha ovqatlar tayyor (100%).', 'All the meals are ready (100%).'), '', h(X.THANKS[n % X.THANKS.length]), '',
     '👶 <b>' + T(lang, 'Bugungi foyda:', "Today's benefit:") + '</b> ' + h(X.BENEFITS[n % X.BENEFITS.length]), '',
     '📿 ' + pre + '«' + h(hd[0].replace(/^«|»$/g, '')) + '» (' + h(hd[1]) + ')', '',
     '<b>' + T(lang, "Dunyoda sog'lom farzand, oxiratda ajr va jannat bo'lsin! 🤲", 'May it bring a healthy child in this world, and reward and Paradise in the Hereafter! 🤲') + '</b>'].join('\n');
@@ -141,7 +147,7 @@ function celebrateText(date, lang) {
 // History (admin only): result per day, what was left, and who ticked what and when
 async function history(env, cfg, lang) {
   const t = today(), start = cfg.start || t;
-  const days = DAYS.filter((d) => d <= t && d >= start).reverse();
+  const days = DAYS.filter((d) => d <= (MENU[t] ? target(t) : t) && d >= start).reverse(); // includes the day being prepared
   return Promise.all(days.map(async (d) => {
     const st = await getState(env, d), pr = progress(d, st, lang);
     const log = items(d, lang).filter((x) => x.food && st[x.k] && st['@' + x.k]).map((x) => { const a = st['@' + x.k].split('|'); return { t: x.t, at: a[0], by: a[1] || '' }; }).sort((a, b) => (a.at < b.at ? -1 : 1));
@@ -194,9 +200,10 @@ const helpText = (lang) => T(lang,
   'Assalamu alaykum! 🌷 Every day at 12:00, 16:00 and 20:00 you get today\'s menu. Press the button to open the list and tick each food when it is ready.\n\n/today — today\'s list\n/tomorrow — tomorrow\'s menu\n/language — choose the language');
 
 async function sendToday(env, cfg, chatId) {
-  const lang = langOf(cfg, chatId), date = today(), slot = hourNow() < 16 ? '12' : hourNow() < 20 ? '16' : '20';
-  if (!MENU[date]) return tg(env, 'sendMessage', { chat_id: chatId, text: T(lang, "Bugun uchun menyu yo'q. Yaxshi dam oling 🌸", 'There is no menu for today. Have a good rest 🌸') });
-  return tg(env, 'sendMessage', { chat_id: chatId, text: build(date, slot, await getState(env, date), lang), parse_mode: 'HTML', reply_markup: openButton(cfg, lang, date), disable_web_page_preview: true });
+  const lang = langOf(cfg, chatId), now = today(), slot = hourNow() < 16 ? '12' : hourNow() < 20 ? '16' : '20';
+  const date = MENU[now] ? target(now) : DAYS.find((d) => d > now);
+  if (!date) return tg(env, 'sendMessage', { chat_id: chatId, text: T(lang, "Hozircha menyu yo'q. Yaxshi dam oling 🌸", 'There is no menu right now. Have a good rest 🌸') });
+  return tg(env, 'sendMessage', { chat_id: chatId, text: build(date, slot, await getState(env, date), lang, MENU[now] ? now : date), parse_mode: 'HTML', reply_markup: openButton(cfg, lang, date), disable_web_page_preview: true });
 }
 
 async function onCallback(env, q) {
