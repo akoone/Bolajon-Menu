@@ -1,7 +1,7 @@
 // Bolajon menu bot for Cloudflare Workers.
 // Files: worker.js (this logic), data.js (menu and texts, rebuilt each month), app.js (mini app page).
 // Needs: a secret named BOT_TOKEN and a KV namespace bound as KV. See SETUP.md.
-import { MENU, UZ, EN, RULEKEYS } from './data.js';
+import { MENU, UZ, EN, RULEKEYS, NAMES_UZ, NAMES_EN } from './data.js';
 import { APP_UZ, APP_EN } from './app.js';
 
 const EFFECT_PARTY = '5046509860389126442'; // Telegram 🎉 effect
@@ -144,6 +144,7 @@ function build(date, slot, st, lang, now) {
   L = L.concat(statusLines(date, st, slot === '20', lang));
   L.push('', T(lang, '⚠️ Allergenlar: ', '⚠️ Allergens: ') + h(alg(lang, m.allergen)));
   if (slot === '12') L.push('💡 ' + X.TIPS_12[n % X.TIPS_12.length]);
+  if (slot === '12') { const ni = (p.d + p.m * 31) % 99, nm = (lang === 'en' ? NAMES_EN : NAMES_UZ)[ni]; L.push('', '🤲 <b>' + T(lang, "Bugungi go'zal ism", 'Name of the day') + '</b> (' + (ni + 1) + '/99)', nm[0] + '  <b>' + h(nm[1]) + '</b>', '<i>' + h(nm[2]) + '</i>'); }
   if (slot === '16') L.push('💡 ' + X.TIPS_16[n % X.TIPS_16.length], T(lang, "O'zingiz ham bir piyola choy iching, dam oling ☕", 'Have a cup of tea yourself and rest a little ☕'));
   if (now !== date && MENU[now]) { const t = MENU[now]; L.push('', '<b>' + T(lang, '👶 Bugun bola yeydi:', '👶 Baby eats today:') + '</b>', '🌅 ' + h(dn(lang, t.ertalab)), '🍚 ' + t.tushlik.map((x) => h(dn(lang, x))).join(', ')); if (t.kechki) L.push('🍎 ' + h(dn(lang, t.kechki))); }
   if (slot === ['12', '16', '20'][(p.d * 7 + p.m) % 3]) L.push('', h(savingLine(now, lang)));
