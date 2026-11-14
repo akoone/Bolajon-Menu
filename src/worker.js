@@ -141,6 +141,7 @@ function build(date, slot, st, lang, now) {
   const label = m.label ? ' ✨ ' + h(lang === 'en' ? EN.label[m.label] || m.label : m.label) : '';
   if (now !== date) L.push('', T(lang, '📅 Bugun: ', '📅 Today: ') + '<b>' + fd(lang, now, true) + '</b>', T(lang, '🍳 Tayyorlaymiz: ', '🍳 Preparing for: ') + '<b>' + fd(lang, date, true) + '</b>' + label, bar(pr.pct));
   else L.push('', '<b>📅 ' + fd(lang, date, true) + '</b>' + label, bar(pr.pct));
+  if (m.derived) L.push(T(lang, "ℹ️ <i>Bu kun bog'cha jadvalida yo'q. Menyu shu oydagi o'xshash taomlardan tuzildi.</i>", 'ℹ️ <i>This day is not in the daycare schedule. The menu was put together from similar dishes of this month.</i>'));
   L = L.concat(statusLines(date, st, slot === '20', lang));
   L.push('', T(lang, '⚠️ Allergenlar: ', '⚠️ Allergens: ') + h(alg(lang, m.allergen)));
   if (slot === '12') L.push('💡 ' + X.TIPS_12[n % X.TIPS_12.length]);
@@ -166,6 +167,7 @@ async function send21(env) {
     const L = ['🌙 <b>' + T(lang, 'KUN YAKUNI', 'END OF DAY') + '</b>', '<i>' + fd(lang, now, true) + '</i>', LINE, '',
       '👶 <b>' + T(lang, 'Bugun bolajon yedi', 'Today the little one ate') + '</b>', '']
       .concat(ate.map((x) => (ICON[x.k] || '🍽') + '  ' + h(x.t) + (stNow[x.k] ? ' ✅' : '')));
+    if (MENU[now].derived) L.push('', T(lang, "ℹ️ <i>Bugun bog'cha jadvalida yo'q edi, menyu o'xshash taomlardan tuzilgan.</i>", 'ℹ️ <i>Today was not in the daycare schedule, the menu was put together from similar dishes.</i>'));
     L.push('', '<blockquote>💛 ' + h(X.BENEFITS[n % X.BENEFITS.length]) + '</blockquote>');
     if (date !== now) {
       const pr = progress(date, st, lang);
