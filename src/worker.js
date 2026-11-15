@@ -105,8 +105,9 @@ function savingLine(date, lang) {
 const appUrl = (cfg, lang, date) => cfg.url + '/app?d=' + date + '&l=' + lang;
 const openButton = (cfg, lang, date) => ({ inline_keyboard: [[{ text: T(lang, "📋 Ro'yxatni ochish va belgilash", '📋 Open the list and tick'), web_app: { url: appUrl(cfg, lang, date) } }]] });
 // textFn(lang) builds the message in each person's own language
-async function sendAll(env, cfg, textFn, date, extra) {
-  await Promise.all(Object.keys(cfg.chats).map(async (id) => {
+// only: send to these chat ids instead of everyone
+async function sendAll(env, cfg, textFn, date, extra, only) {
+  await Promise.all((only || Object.keys(cfg.chats)).map(async (id) => {
     const lang = langOf(cfg, id);
     const p = { chat_id: id, text: textFn(lang), parse_mode: 'HTML', disable_web_page_preview: true };
     if (date) p.reply_markup = openButton(cfg, lang, date);
@@ -222,12 +223,14 @@ async function tick(env, cfg, u, date, key, val) {
   const name = 't:' + date + ':' + key;
   if (val) await db(env).put(name, '1', { metadata: { at: hhmm(), by: cfg.chats[u] || '' } }); else await db(env).delete(name);
   if (!it0.food || !val) return;
+  // What the admin does in his own chat stays there: his ticks are saved for everyone but only he gets the note.
+  const only = u === cfg.owner ? [u] : null;
   const st = await getState(env, date); st[key] = 1; // include this tick even if the list is a moment behind
   const all = progress(date, st, 'uz').left.length === 0;
   if (all) {
     if (await db(env).get('done:' + date)) return;
     await db(env).put('done:' + date, '1');
-    return sendAll(env, cfg, (lang) => celebrateText(date, lang), null, { message_effect_id: EFFECT_PARTY });
+    return sendAll(env, cfg, (lang) => celebrateText(date, lang), null, { message_effect_id: EFFECT_PARTY }, only);
   }
   const who = cfg.chats[u] ? h(cfg.chats[u]) + ' · ' : '';
   await sendAll(env, cfg, (lang) => {
@@ -236,7 +239,7 @@ async function tick(env, cfg, u, date, key, val) {
       bar(pr.pct) + '  (' + pr.done + '/' + pr.all + ')', '',
       '<b>' + T(lang, 'Qoldi:', 'Still to do:') + '</b>'].concat(pr.left.map((x) => '▫️ ' + h(x.t)),
       ['', '<blockquote>' + h(X.PRAISE[pr.done % X.PRAISE.length]) + ' ' + T(lang, 'Yana ' + pr.left.length + ' ta qoldi.', pr.left.length + ' more to go.') + '</blockquote>']).join('\n');
-  });
+  }, null, null, only);
 }
 
 
