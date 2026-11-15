@@ -223,8 +223,7 @@ async function tick(env, cfg, u, date, key, val) {
   const name = 't:' + date + ':' + key;
   if (val) await db(env).put(name, '1', { metadata: { at: hhmm(), by: cfg.chats[u] || '' } }); else await db(env).delete(name);
   if (!it0.food || !val) return;
-  // What the admin does in his own chat stays there: his ticks are saved for everyone but only he gets the note.
-  const only = u === cfg.owner ? [u] : null;
+  const only = null; // everyone gets the tick note, whoever ticked
   const st = await getState(env, date); st[key] = 1; // include this tick even if the list is a moment behind
   const all = progress(date, st, 'uz').left.length === 0;
   if (all) {
